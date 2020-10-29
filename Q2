@@ -1,0 +1,88 @@
+from scipy.integrate import solve_ivp
+import matplotlib.pyplot as plt
+import numpy as np
+
+class Car:
+
+    def __init__(self, length=2.3, velocity=5,
+                 x_initial=0, y_initial=0, pose_initial=2 * np.pi / 180):
+        self.__length = length
+        self.__velocity = velocity
+        self.__x = x_initial
+        self.__y = y_initial
+        self.__pose = pose_initial
+
+    def move(self, u, dt):
+        def system_dynamics(_t, z):
+            x = z[0]
+            y = z[1]
+            theta = z[2]
+            return [self.__velocity * np.cos(theta),
+                    self.__velocity * np.sin(theta),
+                    self.__velocity * np.tan(u)/ self.__length]
+
+        sol = solve_ivp(system_dynamics,
+                        [0, dt],
+                        [self.__x, self.__y, self.__pose])
+
+        self.__x = sol.y[0][-1]
+        self.__y = sol.y[1][-1]
+        self.__pose = sol.y[2][-1]
+    def x(self):
+        return  self.__x
+
+    def y(self):
+        return self.__y
+
+    def pose(self):
+        return self.__pose
+
+
+
+class PidController:
+    def __init__(self, kp, ki, kd, ts):
+       # kp: proportional gain
+       # ki: integral gian
+       # kd: derivative gain
+       # ts: sampling time
+
+        self.__kp = kp
+        self.__kd = kd / ts
+        self.__ki = ki * ts
+        self.__ts = ts
+        self.__previous_error = None
+        self.__error = 0.
+
+    def control(self, y, y_set_point=0.):
+
+        error = y_set_point - y
+        steering_action = self.__kp * error
+
+        if self.__previous_error is not None:
+            _error = error - self.__previous_error
+            steering_action += self.__kd * _error
+
+        if self.__previous_error is not None:
+            self.__error += error
+        steering_action += self.__ki * self.__error
+
+        self.__previous_error = error
+        return steering_action
+
+
+t_sampling = 0.050
+car = Car(y_initial=0.5, velocity=5)
+pid = PidController(kp=1, kd=0.18, ki=0.1, ts=t_sampling)
+u_dist = np.pi / 180
+y_cache = np.array([car.y()], dtype=float)
+
+for k in range(999):
+    _u = pid.control(car.y())
+    car.move(_u + u_dist, t_sampling)
+    y_cache = np.append(y_cache, car.y())
+t_span = t_sampling * np.arange(1000)
+plt.plot(t_span, y_cache)
+plt.xlabel('Time(t)/second')
+plt.ylabel(' y(m)/m')
+plt.grid()
+plt.show()
